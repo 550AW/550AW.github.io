@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <title>Apex 苟分点互动地图</title>
+  <link rel="icon" href="./images/icons/Apex.ico">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.staticfile.org/jquery/1.10.2/jquery.min.js"></script>
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+    }
+
+    #map {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      background: #2c2c2c;
+    }
+
+    .custom-note {
+      background: rgba(255, 255, 255, 0.6);
+      padding: 6px 10px;
+      margin-top: 5px;
+      font-size: 14px;
+      border-radius: 6px;
+      max-width: 220px;
+    }
+
+    #footer-info {
+      position: absolute;
+      right: 10px;
+      bottom: 10px;
+      z-index: 9999;
+      background: rgba(255, 255, 255, 0.6);
+      padding: 8px 12px;
+      border-radius: 10px;
+      font-size: 14px;
+      line-height: 1.4em;
+    }
+
+    #footer-info a {
+      color: #000;
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <div id="footer-info">
+    原作者: xunfeng<br>
+    <a href="https://space.bilibili.com/290304729" target="_blank">B站主页</a> |
+    <a href="https://github.com/xunfengawa" target="_blank">项目地址</a>
+  </div>
+
+  <script>
+    const bounds = [[0, 0], [4256, 4256]];
+
+    const map = L.map('map', {
+      minZoom: -2.5,
+      maxZoom: 4,
+      zoomSnap: 0.5,
+      zoomDelta: 0.5,
+      crs: L.CRS.Simple,
+      attributionControl: false,
+      zoomControl: false
+    });
+
+    map.setView([0.0, 0.0], 0);
+    map.fitBounds(bounds);
+
+    // 红点图标
+    const dotIcon = L.Icon.extend({ options: { iconSize: [10, 10] } });
+    const red_dot = new dotIcon({ iconUrl: './images/icons/red_dot.png' });
+
+    // 加载 JSON 点位
+    function addDotFromLocalJSON(jsonPath, groupNum, dotGroup) {
+      fetch(jsonPath)
+        .then(response => response.json())
+        .then(data => {
+          data.forEach((point, idx) => {
+            const coord = point.Coord.split(',').map(Number);
+            let html = `<strong>${point.Name}</strong>`;
+            if (point.Link) {
+              html += `<br><a href="${point.Link}" target="_blank">${point.Link_str}</a>`;
+            }
+            if (point.Link2) {
+              html += `<br><a href="${point.Link2}" target="_blank">${point.Link_str2}</a>`;
+            }
+            L.marker(coord, { icon: red_dot, riseOnHover: true })
+              .addTo(dotGroup)
+              .bindPopup(html)
+              .bindTooltip(point.Name, { direction: 'top', sticky: true });
+          });
+          console.log(`✔ 加载完成：${jsonPath}`);
+        }).catch(err => {
+          console.warn(`✖ 加载失败：${jsonPath}`, err);
+        });
+    }
+
+    // 地图配置
+    const groups = {
+      "残月": {
+        layer: L.layerGroup(),
+        json: "./locs/BrokenMoon.json",
+        map: "./images/maps/残月.jpg"
+      },
+      "电力区域": {
+        layer: L.layerGroup(),
+        json: "./locs/E-District.json",
+        map: "./images/maps/电力区域.jpg"
+      },
+      "风暴点": {
+        layer: L.layerGroup(),
+        json: "./locs/StormPoint.json",
+        map: "./images/maps/风暴点.jpg"
+      },
+      "世界尽头": {
+        layer: L.layerGroup(),
+        json: "./locs/WorldsEdge.json",
+        map: "./images/maps/世界尽头.jpg"
+      },
+      "奥林匹斯": {
+        layer: L.layerGroup(),
+        json: "./locs/Olympus.json",
+        map: "./images/maps/奥林匹斯.jpg"
+      },
+      "诸王峡谷": {
+        layer: L.layerGroup(),
+        json: "./locs/KingsCanyon.json",
+        map: "./images/maps/诸王峡谷.jpg"
+      }
+    };
+
+    // 加载图层组
+    const baseLayers = {};
+    Object.entries(groups).forEach(([name, info], index) => {
+      const imageLayer = L.imageOverlay(info.map, bounds).addTo(info.layer);
+      const dotGroup = L.layerGroup().addTo(info.layer);
+      addDotFromLocalJSON(info.json, index + 1, dotGroup);
+      baseLayers[name] = info.layer;
+    });
+
+    // 添加地图选择控件（唯一声明）
+    const layerControl = L.control.layers(baseLayers, {}, {
+      collapsed: false,
+      position: 'topleft'
+    }).addTo(map);
+
+    // 默认地图
+    const defaultLayer = Object.values(groups)[0].layer;
+    defaultLayer.addTo(map);
+
+    // 添加说明控件（在地图选择控件下方）
+    const noteControl = L.control({ position: 'topleft' });
+    noteControl.onAdd = function() {
+      const div = L.DomUtil.create('div', 'custom-note');
+      div.innerHTML = "S17地图点，已在慢慢更新至S26";
+      div.style.marginTop = '5px';
+      div.style.marginLeft = '10px';
+      return div;
+    };
+    noteControl.addTo(map);
+
+    // 点击显示坐标
+    map.on('click', e => {
+      const { lat, lng } = e.latlng;
+      if (lat >= 0 && lng >= 0 && lat <= 4256 && lng <= 4256) {
+        const str = `[${lat.toFixed(3)}, ${lng.toFixed(3)}]`;
+        L.popup().setLatLng(e.latlng).setContent(str).openOn(map);
+      }
+    });
+  </script>
+</body>
+</html>
